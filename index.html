@@ -22,8 +22,31 @@
   border-radius: 5px;
   display: none;
 ">
- 
 </div>
+<div id="timeDisplay" style="
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: rgba(0,0,0,0.6);
+  color: white;
+  padding: 8px 12px;
+  border-radius: 5px;
+  font-family: monospace;
+  font-size: 16px;
+  z-index: 10;">
+  Time: 0.00s
+</div>
+<div style="
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  z-index: 10;
+">
+  <button id="playBtn">▶ 播放</button>
+  <button id="pauseBtn">⏸ 暫停</button>
+  <button id="resetBtn">🔄 重製</button>
+</div>
+
 <script type="module">
   import * as THREE from 'https://cdn.skypack.dev/three@0.150.1';
 
@@ -44,11 +67,17 @@
   );
   ground.rotation.x = -Math.PI / 2;
   scene.add(ground);
+  const dangerArea = new THREE.Mesh(
+  new THREE.BoxGeometry(2, 0.2, 2), // 大小範圍：2x2 公尺
+  new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.3 })
+  );
+scene.add(dangerArea);
 
   const pedestrianPath = [];
   const carPath = [];
   let time = 0;
 
+  
   function createMarker(x, y, z, color = 0xffff00) {
     const marker = new THREE.Mesh(
       new THREE.SphereGeometry(0.2, 16, 16),
@@ -57,11 +86,37 @@
     marker.position.set(x, y, z);
     scene.add(marker);
   }
+const timeDisplay = document.getElementById('timeDisplay');
+const playBtn = document.getElementById('playBtn');
+const pauseBtn = document.getElementById('pauseBtn');
+const resetBtn = document.getElementById('resetBtn');
 
+
+let isPlaying = false;
+playBtn.onclick = () => isPlaying = true;
+pauseBtn.onclick = () => isPlaying = false;
+resetBtn.onclick = () => {
+  time = 0;
+  isPlaying = false;
+  timeDisplay.innerText = `模擬秒數: 0.00s`;
+  
+  // 清除所有紅藍點（路徑）
+  pedestrianPath.length = 0;
+  carPath.length = 0;
+  [...scene.children].forEach(obj => {
+    if (obj.isMesh && obj.geometry.type === 'SphereGeometry') {
+      scene.remove(obj);
+    }
+  });
+};
   function animate() {
-    requestAnimationFrame(animate);
-    time += 0.01;
+      requestAnimationFrame(animate);
+    if (isPlaying) {
 
+
+  
+    time += 0.01;
+    timeDisplay.innerText = `模擬秒數: ${time.toFixed(2)}s`;
     
     // 行人從 (0, 0) 向 Z 軸正方向前進
       let pedX, pedZ;
@@ -87,7 +142,8 @@
       const pedPos = new THREE.Vector3(pedX, 0.1, pedZ);
       const carPos = new THREE.Vector3(carX, 0.1, carZ);
       const distance = pedPos.distanceTo(carPos);
-       
+       dangerArea.position.set(carX, 0.1, carZ);
+
         createMarker(pedPos.x, pedPos.y, pedPos.z, 0xff0000); // red
         pedestrianPath.push(pedPos);
       
@@ -111,6 +167,18 @@
       
     }
 
+
+
+
+
+
+
+
+
+
+
+
+    }
     renderer.render(scene, camera);
   }
 
