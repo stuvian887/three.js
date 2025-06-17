@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>test</title>
+  <title>threejs</title>
   <style>
     body { margin: 0; }
     canvas { display: block; }
@@ -63,6 +63,29 @@
     font-size: 16px;
     z-index: 10;
   ">Speed: 0.00</div>
+  <!-- 速率圖例 -->
+<div id="speedLegend" style="
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  background: rgba(0,0,0,0.7);
+  color: white;
+  padding: 10px;
+  border-radius: 10px;
+  font-family: monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  z-index: 10;
+">
+  <div><span style="color:#add8e6">●</span> < 0.5 (慢)</div>
+  <div><span style="color:#00008b">●</span> < 1.0</div>
+  <div><span style="color:#90ee90">●</span> < 1.5</div>
+  <div><span style="color:#006400">●</span> < 2.0</div>
+  <div><span style="color:#ff0000">●</span> < 2.5</div>
+  <div><span style="color:#8b0000">●</span> ≥ 2.5 (快)</div>
+</div>
+
+
 
   <script type="module">
     import * as THREE from 'https://cdn.skypack.dev/three@0.150.1';
@@ -104,11 +127,32 @@
     const pedestrianPath = [];
     const carPath = [];
 
+    // 額外的行人清單（不同路線）
+const pedestriansFromObject = [];
+const pedestriansWandering = [];
+
+// 初始化 1 個從對象來的行人
+pedestriansFromObject.push({
+  id: 'fromObject1',
+  position: new THREE.Vector3(0, 0.1, 15),  // 起點位置
+  direction: new THREE.Vector3(1, 0, -1).normalize(), // 固定方向
+  speed: 0.02
+});
+
+// 初始化 1 個自由走動的行人
+pedestriansWandering.push({
+  id: 'wanderer1',
+  position: new THREE.Vector3(0, 0.1, 20), // 起點
+  direction: new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize(),
+  speed: 0.01,
+  changeTimer: 0
+});
+
     // 計時與速度設定
     let time = 0;
     let carDistance = 0;
     window.currentSpeedSecond = -1;
-    window.currentCarSpeed = Math.random() * 5;
+    window.currentCarSpeed = Math.random() * 3;
 
     // 建立路徑點標記
     function createMarker(x, y, z, color = 0xffff00) {
@@ -122,7 +166,7 @@
 
     // 橢圓形碰撞區（用圓形代表地面範圍）
     const collisionArea = new THREE.Mesh(
-      new THREE.CircleGeometry(1, 16),
+      new THREE.CircleGeometry(1, 32),
       new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.3 })
     );
     collisionArea.rotation.x = -Math.PI / 2;
@@ -141,9 +185,26 @@
     pauseBtn.onclick = () => isPlaying = false;
 
     resetBtn.onclick = () => {
+      pedestriansFromObject.length = 0;
+pedestriansFromObject.push({
+  id: 'fromObject1',
+  position: new THREE.Vector3(-10, 0.1, -10),
+  direction: new THREE.Vector3(1, 0, 1).normalize(),
+  speed: 0.02
+});
+
+pedestriansWandering.length = 0;
+pedestriansWandering.push({
+  id: 'wanderer1',
+  position: new THREE.Vector3(5, 0.1, -5),
+  direction: new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize(),
+  speed: 0.01,
+  changeTimer: 0
+});
+
       carDistance = 0;
       window.currentSpeedSecond = -1;
-      window.currentCarSpeed = Math.random() * 5;
+      window.currentCarSpeed = Math.random() * 3;
       time = 0;
 
       isPlaying = false;
@@ -161,94 +222,151 @@
       warningDiv.style.display = "none";
     };
 
-    // 主動畫迴圈
-    function animate() {
-      requestAnimationFrame(animate);
+    // 
+ function isInsideEllipse(px, pz, centerX, centerZ, radiusX, radiusZ) {
+  const dx = px - centerX;
+  const dz = pz - centerZ;
+  return (dx * dx) / (radiusX * radiusX) + (dz * dz) / (radiusZ * radiusZ) <= 1;
+}
 
-      if (isPlaying) {
-        time += 0.01;
-        timeDisplay.innerText = `模擬秒數: ${time.toFixed(2)}s`;
-
-        // 行人位置計算
-        let pedX, pedZ;
-        if (time < 3) {
-          pedX = 0;
-          pedZ = time * 2;
-        } else {
-          const t = time - 3;
-          pedX = t / 3;
-          pedZ = 6 + t * 2;
-        }
-
-        // 汽車速度每秒隨機更新
-        const currentSecond = Math.floor(time);
-        if (currentSecond !== window.currentSpeedSecond) {
-          window.currentSpeedSecond = currentSecond;
-          window.currentCarSpeed = Math.random() * 5;
-          console.log(`⏱ 秒數 ${currentSecond}s ➜ 新速度 ${window.currentCarSpeed.toFixed(2)} units/s`);
-        }
-
-        const carSpeed = window.currentCarSpeed;
-        carDistance += carSpeed * 0.01; // 每幀時間為 0.01 秒
-
-        const carX = 2;
-        const carZ = carDistance;
-        speedDisplay.innerText = `Speed: ${carSpeed.toFixed(2)} units/s`;
-
-        // 每 0.5 秒紀錄路徑與判斷距離
-        if (Math.round(time * 10) % 5 === 0) {
-          const pedPos = new THREE.Vector3(pedX, 0.1, pedZ);
-          const carPos = new THREE.Vector3(carX, 0.1, carZ);
-          const distance = pedPos.distanceTo(carPos);
-
-          // 危險區域跟隨車子位置
-          dangerArea.position.set(carX, 0.1, carZ);
-
-          // 繪製行人與車子路徑點
-          createMarker(pedPos.x, pedPos.y, pedPos.z, 0xff0000); // 行人紅點
-          pedestrianPath.push(pedPos);
-
-          createMarker(carPos.x, carPos.y, carPos.z, 0x0000ff); // 車子藍點
-          carPath.push(carPos);
-
-          // 調整橢圓碰撞區大小，車速越快，前後長度越長
-          const scaleX = 1; // 車寬固定
-          const scaleZ = 1 + carSpeed * 0.5;
-          collisionArea.scale.set(scaleX, scaleZ, 1);
-          collisionArea.position.set(carX, 0.05, carZ);
-
-          // 判斷碰撞或接近距離，顯示警告
-          const warningDiv = document.getElementById("warning");
-
-            // 計算行人與黃色區塊的距離
-            const distToYellow = pedPos.distanceTo(collisionArea.position);
-            // 計算行人與紅色區塊的距離
-            const distToRed = pedPos.distanceTo(dangerArea.position);
-
-            if (distToRed <1) {
-              console.log("碰撞！");
-              warningDiv.innerText = "碰撞！";
-              warningDiv.style.background = "red";
-              warningDiv.style.display = "block";
-            } else if (distToYellow < 1) {
-              console.log("警示！");
-              warningDiv.innerText = "警示！";
-              warningDiv.style.background = "orange";
-              warningDiv.style.display = "block";
-            } else {
-              warningDiv.style.display = "none";
-            }
-
-        }
-
-        // 每秒輸出一次時間和速度資訊 (除錯用)
-        if (Math.floor(time * 10) % 10 === 0) {
-          console.log(`Time: ${time.toFixed(2)}s, Speed: ${carSpeed.toFixed(2)} units/s`);
-        }
-      }
-
-      renderer.render(scene, camera);
+function isInsideBox(px, pz, centerX, centerZ, halfSizeX, halfSizeZ) {
+  return (
+    Math.abs(px - centerX) <= halfSizeX &&
+    Math.abs(pz - centerZ) <= halfSizeZ
+  );
+}
+function getColorBySpeed(speed) {
+      if (speed < 0.5) return '#add8e6';
+      if (speed < 1.0) return '#00008b';
+      if (speed < 1.5) return '#90ee90';
+      if (speed < 2.0) return '#006400';
+      if (speed < 2.5) return '#ff0000';
+      return '#8b0000';
     }
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  if (isPlaying) {
+    time += 0.01;
+    timeDisplay.innerText = `模擬秒數: ${time.toFixed(2)}s`;
+
+    let pedX, pedZ;
+    if (time < 2) {
+      pedX = 0;
+      pedZ = time +2;
+    } else {
+      const t = time - 3;
+      pedX = 0 + t * (1 / 3);
+      pedZ = time+2;
+    }
+
+    const currentSecond = Math.floor(time);
+    if (typeof window.currentSpeedSecond === 'undefined') {
+      window.currentSpeedSecond = -1;
+      window.currentCarSpeed = Math.random() * 3;
+    }
+
+    if (currentSecond !== window.currentSpeedSecond) {
+      window.currentSpeedSecond = currentSecond;
+      window.currentCarSpeed = Math.random() * 3;
+      console.log(`⏱ 秒數 ${currentSecond}s ➜ 新速度 ${window.currentCarSpeed.toFixed(2)} units/s`);
+    }
+
+    const carSpeed = window.currentCarSpeed;
+    carDistance += carSpeed * 0.01;
+
+    const carX = 2;
+    const carZ = carDistance;
+    speedDisplay.innerText = `Speed: ${carSpeed.toFixed(2)} units/s`;
+
+    // 更新碰撞區範圍
+    const scaleX = 1;
+    const scaleZ = 1 + carSpeed * 0.5;
+    collisionArea.scale.set(scaleX, scaleZ, 1);
+    collisionArea.position.set(carX, 0.05, carZ);
+    dangerArea.position.set(carX, 0.1, carZ);
+  collisionArea.material.color.set(getColorBySpeed(carSpeed));
+    if (Math.round(time * 10) % 5 === 0) {
+      const pedPos = new THREE.Vector3(pedX, 0.1, pedZ);
+      const carPos = new THREE.Vector3(carX, 0.1, carZ);
+      const warningDiv = document.getElementById("warning");
+
+      createMarker(pedPos.x, pedPos.y, pedPos.z, 0xff0000);
+      pedestrianPath.push(pedPos);
+      createMarker(carPos.x, carPos.y, carPos.z, 0x0000ff);
+      carPath.push(carPos);
+
+      // 判斷是否進入黃色橢圓或紅色方塊
+      const radiusX = 1;
+      const radiusZ = scaleZ;
+      const inYellow = isInsideEllipse(pedX, pedZ, carX, carZ, radiusX, radiusZ);
+      const inRed = isInsideBox(pedX, pedZ, carX, carZ, 1, 1);
+
+      if (inRed) {
+        console.log("碰撞！");
+        warningDiv.innerText = "碰撞！";
+        warningDiv.style.background = "red";
+        warningDiv.style.display = "block";
+      } else if (inYellow) {
+        console.log("進入警示區！");
+        warningDiv.innerText = "警示！";
+        warningDiv.style.background = "orange";
+        warningDiv.style.display = "block";
+      } else {
+        warningDiv.style.display = "none";
+      }
+      for (let ped of pedestriansFromObject) {
+  ped.position.addScaledVector(ped.direction, ped.speed);
+  createMarker(ped.position.x, ped.position.y, ped.position.z, 0x00ff00);
+
+  // 碰撞偵測
+
+  if (inRed) {
+    warningDiv.innerText = "碰撞（固定路線行人）！";
+    warningDiv.style.background = "red";
+    warningDiv.style.display = "block";
+  } else if (inYellow) {
+    warningDiv.innerText = "警示（固定路線行人）！";
+    warningDiv.style.background = "orange";
+    warningDiv.style.display = "block";
+  }
+}
+
+// 更新自由走動行人
+for (let ped of pedestriansWandering) {
+  // 偶爾換方向
+  ped.changeTimer += 0.01;
+  if (ped.changeTimer > 1.5) {
+    ped.direction = new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
+    ped.changeTimer = 0;
+  }
+
+  ped.position.addScaledVector(ped.direction, ped.speed);
+  createMarker(ped.position.x, ped.position.y, ped.position.z, 0x00ffff);
+
+  const inYellow = isInsideEllipse(ped.position.x, ped.position.z, carX, carZ, 1, scaleZ);
+  const inRed = isInsideBox(ped.position.x, ped.position.z, carX, carZ, 1, 1);
+  if (inRed) {
+    warningDiv.innerText = "碰撞（亂走的）！";
+    warningDiv.style.background = "red";
+    warningDiv.style.display = "block";
+  } else if (inYellow) {
+    warningDiv.innerText = "警示（亂走的）！";
+    warningDiv.style.background = "orange";
+    warningDiv.style.display = "block";
+  }
+}
+    }
+
+    if (Math.floor(time * 10) % 10 === 0) {
+      console.log(`Time: ${time.toFixed(2)}s, Speed: ${carSpeed.toFixed(2)} units/s`);
+    }
+  }
+
+  renderer.render(scene, camera);
+}
+
 
     animate();
   </script>
