@@ -1,0 +1,11 @@
+Model Information:
+* title:	Toyota corolla altis lidar scan
+* source:	https://sketchfab.com/3d-models/toyota-corolla-altis-lidar-scan-7e8f01d08cec452ebeb497be54aa91fa
+* author:	GoodScan 3D (https://sketchfab.com/goodscan3d)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Toyota corolla altis lidar scan" (https://sketchfab.com/3d-models/toyota-corolla-altis-lidar-scan-7e8f01d08cec452ebeb497be54aa91fa) by GoodScan 3D (https://sketchfab.com/goodscan3d) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
