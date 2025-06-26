@@ -66,9 +66,11 @@ import { GLTFLoader } from 'https://esm.sh/three@0.150.1/examples/jsm/loaders/GL
     scene.background = new THREE.Color(0xa0a0a0);
 
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-     camera.position.set(15, 15, 15);
-    camera.lookAt(-10, 0, 10);
-
+    //  camera.position.set(15, 15, 15);
+    // camera.lookAt(-10, 0, 10);
+    camera.position.set(0, 50, 0);
+      camera.lookAt(0, 0, 0);
+      camera.up.set(0, 0, 1);
 
     const renderer = new THREE.WebGLRenderer();
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -235,7 +237,7 @@ function animate() {
 
 
   if (!isPlaying) return renderer.render(scene, camera);
-
+console.log(isPlaying);
   time += 0.01;
   document.getElementById('timeDisplay').innerText = `模擬秒數: ${time.toFixed(2)}s`;
 
@@ -263,7 +265,7 @@ function animate() {
   carDistance += carSpeed * 0.01;
   let carZ = time < 0.01 ? -30 : -30 + carDistance;
   if (carModel) {
-  carModel.position.set(1, 0.1, 2.5+carZ);  // 根據車速更新 Z 座標
+  carModel.position.set(1.25, 0.1, 2.5+carZ);  // 根據車速更新 Z 座標
 }
   document.getElementById('speedDisplay').innerText = `Speed: ${carSpeed.toFixed(2)} m/s`;
 
@@ -299,9 +301,13 @@ function animate() {
     document.getElementById("etaDisplay").innerText = `預估進入警示區域時間: ${eta !== null ? eta.toFixed(2) + ' s' : '--'}`;
 
     if (isInsideBox(pedX, pedZ, carX, carZ, 1, 1)) {
+       
       warningDiv.innerText = "碰撞（預設行人）！";
       warningDiv.style.background = "red";
       warningDiv.style.display = "block";
+      isPlaying = false;
+      console.log("ty412");
+      return;
     } else if (checkPedestrian(pedX, pedZ)) {
       warningDiv.innerText = "警示（預設行人）！";
       warningDiv.style.background = "orange";
@@ -321,7 +327,7 @@ function animate() {
         ped.speed,
         new THREE.Vector3(carX, 0, carZ),
         1,
-        scaleZ
+        scaleZ  
       );
       if (eta !== null && (minETA === null || eta < minETA)) minETA = eta;
 
