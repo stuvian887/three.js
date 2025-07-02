@@ -18,59 +18,99 @@
 
 </head>
 <body>
-  <!-- 警告訊息 -->
-  <div id="warning" style="position:absolute;top:20px;left:50%;transform:translateX(-50%);background:red;color:white;padding:10px 20px;font-size:20px;font-weight:bold;border-radius:5px;display:none;"></div>
-  
-  <!-- 時間與速度顯示 -->
-  <div id="timeDisplay" style="position:absolute;top:10px;right:10px;background:rgba(0,0,0,0.6);color:white;padding:8px 12px;border-radius:5px;font-family:monospace;font-size:16px;z-index:10;">Time: 0.00s</div>
-  <div id="speedDisplay" style="position:absolute;top:50px;right:10px;background:rgba(0,0,0,0.6);color:white;padding:8px 12px;border-radius:5px;font-family:monospace;font-size:16px;z-index:10;">Speed: 0.00</div>
-<div id="etaDisplay" style="position:absolute;top:90px;right:10px;background:rgba(0,0,0,0.6);color:white;padding:8px 12px;border-radius:5px;font-family:monospace;font-size:16px;z-index:10;">預估進入警示區域時間: -- s</div>
-
-  <!-- 控制區 -->
-  <div style="position:absolute;bottom:10px;left:10px;z-index:10;">
-    <button id="playBtn">▶ 播放</button>
-    <button id="pauseBtn">⏸ 暫停</button>
-    <button id="resetBtn">🔄 重製</button>
+  <!-- 🚨 螢幕中央警告訊息 -->
+  <div id="warning" style="position:absolute;top:20px;left:50%;transform:translateX(-50%);
+       background:red;color:white;padding:10px 20px;font-size:20px;font-weight:bold;
+       border-radius:5px;display:none;z-index:1000;">
   </div>
 
-  <!-- 車速輸入 -->
-  <div style="position:absolute;bottom:140px;left:10px;background:rgba(255,255,255,0.9);padding:10px;border-radius:5px;z-index:10;">
-    <label>車速 v (m/s)：</label>
-    <input id="speedInput" type="number" step="0.1" value="2.5" style="width:60px;" />
-    <button id="setSpeedBtn">設定</button>
+  <!-- 📈 右上資訊顯示區 -->
+  <div style="position:absolute;top:10px;right:10px;z-index:10;font-family:monospace;font-size:16px;">
+    <div id="timeDisplay" style="margin-bottom:8px;background:rgba(0,0,0,0.6);color:white;
+         padding:8px 12px;border-radius:5px;">
+      模擬秒數: 0.00s
+    </div>
+    <div id="etaDisplay" style="margin-bottom:8px;background:rgba(0,0,0,0.6);color:white;
+         padding:8px 12px;border-radius:5px;">
+      預估進入警示區域時間: -- s
+    </div>
+    <div id="brakeDisplay" style="margin-bottom:8px;background:rgba(0,0,0,0.6);color:white;
+         padding:8px 12px;border-radius:5px;">
+      總煞停距離: -- m<br>
+      總煞停時間: -- s
+    </div>
+    <div id="formulaHUD" style="margin-bottom:8px;background:rgba(0,0,0,0.6);color:white;
+         padding:8px 12px;border-radius:5px;display:none;">
+      <!-- 顯示 t_entry / t_stop -->
+    </div>
+    <div id="resultHUD" style="background:rgba(0,128,0,0.8);color:white;padding:8px 12px;
+         border-radius:5px;font-size:18px;font-weight:bold;display:none;">
+      <!-- 成功或失敗訊息 -->
+    </div>
   </div>
 
-  <!-- 速率圖例 -->
-  <div id="speedLegend" style="position:absolute;bottom:10px;right:10px;background:rgba(0,0,0,0.7);color:white;padding:10px;border-radius:10px;font-family:monospace;font-size:14px;line-height:1.5;z-index:10;">
-    <div><span style="color:#00ffff">●</span> < 10 </div>
-    <div><span style="color:#00ff00">●</span> < 20</div>
-    <div><span style="color:#ffff00">●</span> < 30</div>
-    <div><span style="color:#ffa500">●</span> < 40</div>
-    <div><span style="color:#ff0000">●</span> < 50</div>
+  <!-- 🕹 左下：控制面板 -->
+  <div style="position:absolute;bottom:10px;left:10px;z-index:10;font-family:monospace;font-size:16px;">
+    <!-- 🎮 控制按鈕 -->
+    <div style="margin-bottom:10px;">
+      <button id="playBtn">▶ 播放</button>
+      <button id="pauseBtn">⏸ 暫停</button>
+      <button id="resetBtn">🔄 重製</button>
+    </div>
+
+    <!-- 🚗 車速輸入 -->
+    <div style="margin-bottom:10px;background:rgba(255,255,255,0.9);padding:10px;border-radius:5px;">
+      <label>車速 v (m/s)：</label>
+      <input id="speedInput" type="number" step="0.1" value="16.67" style="width:60px;" />
+      <button id="setSpeedBtn">設定</button>
+    </div>
+
+    <!-- 🧍‍♂️ 行人路線切換 -->
+    <div style="margin-bottom:10px;">
+      <label><input type="radio" name="pedestrianRoute" value="default" checked> 預設路線</label><br>
+      <label><input type="radio" name="pedestrianRoute" value="object"> 對向行人</label><br>
+      <label><input type="radio" name="pedestrianRoute" value="wander"> 自由行人</label>
+    </div>
+
+    <!-- 🧭 左下角速度 HUD (km/h) -->
+    <div id="speedHUD" style="background:rgba(0,0,0,0.6);color:white;padding:8px 12px;
+         border-radius:5px;">
+      速度: 0 km/h
+    </div>
+  </div>
+
+  <!-- 🎨 右下：速度顏色圖例 -->
+  <div id="speedLegend" style="position:absolute;bottom:10px;right:10px;background:rgba(0,0,0,0.7);
+       color:white;padding:10px;border-radius:10px;font-family:monospace;font-size:14px;line-height:1.5;z-index:10;">
+    <div><span style="color:#00ffff">●</span> &lt; 10 </div>
+    <div><span style="color:#00ff00">●</span> &lt; 20</div>
+    <div><span style="color:#ffff00">●</span> &lt; 30</div>
+    <div><span style="color:#ffa500">●</span> &lt; 40</div>
+    <div><span style="color:#ff0000">●</span> &lt; 50</div>
     <div><span style="color:#8b0000">●</span> ≥ 50 </div>
   </div>
 
-  <!-- 行人路線切換 -->
-  <div style="position:absolute;bottom:60px;left:10px;z-index:10;">
-    <label><input type="radio" name="pedestrianRoute" value="default" checked> 預設路線</label><br>
-    <label><input type="radio" name="pedestrianRoute" value="object"> 對向行人</label><br>
-    <label><input type="radio" name="pedestrianRoute" value="wander"> 自由行人</label>
-  </div>
+  <!-- 🔊 音效與紅框 -->
+  <audio id="beepSfx" src="./audio/beep.mp3" preload="auto"></audio>
+  <audio id="voiceSfx" src="./audio/voice_pedestrian.mp3" preload="auto"></audio>
 
+  <div id="redFrame" style="position:fixed;inset:0;border:8px solid rgba(255,0,0,0);
+       pointer-events:none;z-index:999;"></div>
   <script type="module">
     import * as THREE from 'https://esm.sh/three@0.150.1';
 import { GLTFLoader } from 'https://esm.sh/three@0.150.1/examples/jsm/loaders/GLTFLoader.js';
+
 
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0xa0a0a0);
 
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    //  camera.position.set(15, 15, 15);
-    // camera.lookAt(-10, 0, 10);
-    camera.position.set(0, 50, 0);
-      camera.lookAt(0, 0, 0);
-      camera.up.set(0, 0, 1);
+  camera.position.set(15, 15, 15);
+ camera.lookAt(-10, 0, 10);
+    // camera.position.set(0, 50, 0);
+    //   camera.lookAt(0, 0, 0);
+    //   camera.up.set(0, 0, 1);
 
     const renderer = new THREE.WebGLRenderer();
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -136,11 +176,24 @@ scene.add(light);
       scene.remove(obj);
     }
   });
+// 你原本 reset 已經有清球、清文字，額外再加：
+['formulaHUD','resultHUD'].forEach(id=>{
+  const e=document.getElementById(id);
+  e.style.display='none'; e.innerHTML='';
+});
+document.getElementById('redFrame').style.borderColor='rgba(255,0,0,0)';
+window.pathShown = window.formulaShown = window.warnPlayed = window.resultShown = false;
 
   // 重設顯示文字
   document.getElementById('timeDisplay').innerText = `模擬秒數: 0.00s`;
-  document.getElementById('speedDisplay').innerText = `Speed: ${carSpeed.toFixed(2)} m/s`;
+
+document.getElementById('speedHUD').innerText =
+  `速度: ${(carSpeed * 3.6).toFixed(1)} km/h`;
+
   document.getElementById("etaDisplay").innerText = "ETA: -- s";
+document.getElementById("brakeDisplay").innerHTML = `總煞停距離: -- m<br>總煞停時間: -- s`;
+etaDefault = null;
+etaFrozen = false;
 
   // 隱藏警告
   document.getElementById("warning").style.display = "none";
@@ -155,6 +208,8 @@ scene.add(light);
     document.querySelectorAll('input[name="pedestrianRoute"]').forEach(r => {
   r.addEventListener('change', e => {
     selectedRoute = e.target.value;
+etaDefault = null;
+etaFrozen = false;
 
     // 重設模擬時間與車距
     time = carDistance = 0;
@@ -196,6 +251,23 @@ scene.add(light);
     function isInsideBox(px, pz, cx, cz, hx, hz) {
       return Math.abs(px - cx) <= hx && Math.abs(pz - cz) <= hz;
     }
+function drawPredictedPath(startPos, direction, speed, duration = 4, interval = 0.2) {
+  for (let t = 0; t <= duration; t += interval) {
+    const futureX = startPos.x + direction.x * speed * t;
+    const futureY = startPos.y + direction.y * speed * t;
+    const futureZ = startPos.z + direction.z * speed * t;
+
+    // 顏色從綠 -> 紅
+    const color = new THREE.Color().setHSL((1 - t / duration) * 0.33, 1, 0.5); // 0.33 是綠色, 0 是紅色
+
+    const marker = new THREE.Mesh(
+      new THREE.SphereGeometry(0.1, 8, 8),
+      new THREE.MeshBasicMaterial({ color })
+    );
+    marker.position.set(futureX, futureY, futureZ);
+    scene.add(marker);
+  }
+}
 
     function getColorBySpeed(speed) {
   if (speed < 10) return '#00ffff'; // 青色
@@ -228,9 +300,27 @@ function computeETAtoEllipse(pedPos, pedDir, pedSpeed, ellipseCenter, ellipseA, 
   if (Math.max(t1, t2) >= 0) return 0; // 已進入橢圓
   return null; // 不會進入
 }
+let etaDefault = null;     // 預設行人 ETA
+let etaFrozen = false;     // 是否已經進入過橢圓 → 鎖定 ETA
+const SAFE_DIST = 2; // 安全距離閾值 (單位：公尺)
+
 
 let braking = false;       // 是否正在剎車
 let brakeTimer = 0;        // 剎車計時器
+function flashRedFrame() {
+  const frame = document.getElementById('redFrame');
+  let count = 0;
+  const id = setInterval(()=>{
+    frame.style.borderColor = `rgba(255,0,0,${(count%2)?0:1})`;
+    count++;
+    if (count > 6) { clearInterval(id); frame.style.borderColor='rgba(255,0,0,0)'; }
+  }, 150); // 0.15 s 一閃，總共 3 次
+}
+
+const pedInit  = new THREE.Vector3(0, 0.1, 20);
+const pedTarget= new THREE.Vector3( 4, 0.1,   0);
+const pedDir   = new THREE.Vector3().subVectors(pedTarget, pedInit).normalize();
+const pedSpeed = 2.5;         
 
 function animate() {
   requestAnimationFrame(animate);
@@ -240,11 +330,11 @@ function animate() {
 console.log(isPlaying);
   time += 0.01;
   document.getElementById('timeDisplay').innerText = `模擬秒數: ${time.toFixed(2)}s`;
-
+const carX = 2;
+   let carZ = time < 0.01 ? -30 : -30 + carDistance;
   const warningDiv = document.getElementById("warning");
   warningDiv.style.display = "none";
 
-  const carX = 2;
   
   // 如果剎車中，速度逐漸減少
   if (braking) {
@@ -253,24 +343,32 @@ console.log(isPlaying);
     const t_total = t_reaction + carSpeed / a_brake;
     // 依剎車時間調整速度（線性降速）
     carSpeed = Math.max(0, carSpeed * (1 - brakeTimer / t_total));
-    if (carSpeed === 0) {
-      // 剎車完成，停止
-      isPlaying = false;
-      warningDiv.innerText = "車輛已完全剎車！";
-      warningDiv.style.background = "red";
-      warningDiv.style.display = "block";
-    }
+    if (carSpeed === 0.0) {
+  isPlaying = false;
+  warningDiv.innerText = "煞車完成";
+  warningDiv.style.background = "red";
+  warningDiv.style.display = "block";
+
+  if (!window.resultShown) {
+    window.resultShown = true;
+    evaluateStop();  // ✅ 加入這行：進行安全距離判斷
+  }
+
+  return;
+}
+
   }
 
   carDistance += carSpeed * 0.01;
-  let carZ = time < 0.01 ? -30 : -30 + carDistance;
+ 
   if (carModel) {
   carModel.position.set(1.25, 0.1, 2.5+carZ);  // 根據車速更新 Z 座標
 }
-  document.getElementById('speedDisplay').innerText = `Speed: ${carSpeed.toFixed(2)} m/s`;
+document.getElementById('speedHUD').innerText =
+  `速度: ${(carSpeed * 3.6).toFixed(1)} km/h`;
 
   const safeDistance = carSpeed * t_safety + (carSpeed * carSpeed) / (2 * a_brake);
-  const scaleZ = Math.max(1, safeDistance);
+  const scaleZ = Math.max(1, safeDistance); 
 
   collisionArea.scale.set(1, scaleZ, 1);
   collisionArea.position.set(carX, 0.05, carZ);
@@ -290,30 +388,37 @@ console.log(isPlaying);
   }
 
   if (selectedRoute === 'default') {
-    let pedX = -50, pedZ = time + 0.1;
-    if (time >= 0) pedX = time * (1 / 3);
-    const pedPos = new THREE.Vector3(pedX, 0.1, pedZ);
-    createMarker(pedPos.x, pedPos.y, pedPos.z, 0xff0000);
+  const pedPos = pedInit.clone().addScaledVector(pedDir, pedSpeed * time);
+  createMarker(pedPos.x, pedPos.y, pedPos.z, 0xff0000);
 
-    const pedDir = new THREE.Vector3(1, 0, 3).normalize();
-    const pedSpeed = Math.sqrt(1*1 + (1/3)*(1/3));
-    const eta = computeETAtoEllipse(pedPos, pedDir, pedSpeed, new THREE.Vector3(carX, 0, carZ), 1, scaleZ);
-    document.getElementById("etaDisplay").innerText = `預估進入警示區域時間: ${eta !== null ? eta.toFixed(2) + ' s' : '--'}`;
+if (!etaFrozen) {
+   const etaCalc = computeETAtoEllipse(
+     pedPos, pedDir, pedSpeed,
+     new THREE.Vector3(carX, 0, carZ), 1, scaleZ
+   );
 
-    if (isInsideBox(pedX, pedZ, carX, carZ, 1, 1)) {
-       
-      warningDiv.innerText = "碰撞（預設行人）！";
-      warningDiv.style.background = "red";
-      warningDiv.style.display = "block";
-      isPlaying = false;
-      console.log("ty412");
-      return;
-    } else if (checkPedestrian(pedX, pedZ)) {
-      warningDiv.innerText = "警示（預設行人）！";
-      warningDiv.style.background = "orange";
-      warningDiv.style.display = "block";
-    }
+   /* 只有還在橢圓外(>0)時才更新畫面上的 t_entry */
+   if (etaCalc > 0) {
+     etaDefault = etaCalc;      // 保留最後一次正值
+   } else {
+    etaDefault = 0;
+     etaFrozen = true;          // 踏進橢圓 → 鎖定
+   }
+ }
+  document.getElementById("etaDisplay").innerText =
+    `預估進入警示區域時間: ${etaDefault !== null
+        ? etaDefault.toFixed(2) + ' s' : '--'}`;
+if (time > 0.5){
+  if (isInsideBox(pedPos.x, pedPos.z, carX, carZ, 1, 1)) {
+    warningDiv.innerText = "碰撞（預設行人）！";
+    warningDiv.style.background = "red";
+    warningDiv.style.display = "block";
+  } else if (checkPedestrian(pedPos.x, pedPos.z)) {
+    warningDiv.innerText = "警示（預設行人）！";
+    warningDiv.style.background = "orange";
+    warningDiv.style.display = "block";
   }
+}}
 
   if (selectedRoute === 'object') {
     let minETA = null;
@@ -379,10 +484,105 @@ console.log(isPlaying);
   }
 
   // 觸發剎車條件
-  if (isPedestrianInEllipse && !braking) {
-    braking = true;
-    brakeTimer = 0;
+if (isPedestrianInEllipse && !braking) {
+  braking = true;
+  brakeTimer = 0;
+
+  const reactionDistance = carSpeed * t_reaction;
+  const brakeDistance = (carSpeed * carSpeed) / (2 * a_brake);
+  const totalDistance = reactionDistance + brakeDistance;
+
+  const totalTime = t_reaction + (carSpeed / a_brake);
+
+  document.getElementById("brakeDisplay").innerHTML =
+    `總煞停距離: ${totalDistance.toFixed(2)} m<br>總煞停時間: ${totalTime.toFixed(2)} s`;
+}
+
+/* ---------- 1.0 s：顯示預測軌跡 ---------- */
+/* === 1. 顯示預測軌跡：第一次拿到 etaDefault 就畫 === */
+if (!window.pathShown && etaDefault !== null) {
+  window.pathShown = true;
+  const pedPosNow = pedInit.clone().addScaledVector(pedDir, pedSpeed * time);
+  drawPredictedPath(pedPosNow, pedDir, pedSpeed);
+}
+
+/* === 2. 公式 HUD：第一次算出 etaDefault 時就打開 === */
+if (etaDefault !== null) {
+  if (!window.formulaShown) {
+    window.formulaShown = true;
+    document.getElementById('formulaHUD').style.display = 'block';
+    // 固定 t_stop，只算一次
+    window.tStopConst = t_reaction + carSpeed / a_brake;
   }
+
+  const div = document.getElementById('formulaHUD');
+  div.innerHTML =
+    `t_entry（剩餘）= ${etaDefault.toFixed(2)} s<br>` +
+    `t警示（反應+煞停）= ${window.tStopConst.toFixed(2)} s<br>` +
+    `Δ = ${(etaDefault - window.tStopConst).toFixed(2)} s`;
+
+  /* 來不及剎停就立即觸發警示 */
+  if (
+  etaDefault !== null &&
+  etaDefault > 0.05 &&           // ETA 必須大於這個閾值，避免初始就在警戒區誤觸發
+  etaDefault < window.tStopConst &&
+  !window.earlyWarnPlayed &&
+  time > 0.5
+) {
+  const warn = document.getElementById('warning');
+  warn.innerText = '⚠️ 無法及時煞停 ‑ 立即警示！';
+  warn.style.background = 'red';
+  warn.style.display = 'block';
+  document.getElementById('beepSfx').play();
+  flashRedFrame();
+  window.earlyWarnPlayed = true;
+  braking = true;
+  brakeTimer = 0;
+}
+
+}
+
+/* === 3. 結果顯示：車子停下 or 碰撞 就判定 === */
+if (!window.resultShown && (braking && carSpeed === 0 )) {
+  window.resultShown = true;
+  const ok = etaDefault >= window.tStopConst;   // 剎得及 = 成功
+  const div = document.getElementById('resultHUD');
+  div.style.background = ok ? 'rgba(0,128,0,.8)' : 'rgba(128,0,0,.8)';
+  div.innerText = ok ? '✅ 成功避免碰撞' : '❌ 仍有危險';
+  div.style.display = 'block';
+  isPlaying = false;          // 凍結畫面
+  return;
+}
+function evaluateStop() {
+  let minDist = Infinity;
+  const carPos = new THREE.Vector2(carX, carZ);
+
+  // 比較與行人的最短距離
+  if (selectedRoute === 'default') {
+    const pedPos = pedInit.clone().addScaledVector(pedDir, pedSpeed * time);
+    minDist = carPos.distanceTo(new THREE.Vector2(pedPos.x, pedPos.z));
+  } else if (selectedRoute === 'object') {
+    for (let ped of pedestriansFromObject) {
+      const ped2D = new THREE.Vector2(ped.position.x, ped.position.z);
+      minDist = Math.min(minDist, carPos.distanceTo(ped2D));
+    }
+  } else if (selectedRoute === 'wander') {
+    for (let ped of pedestriansWandering) {
+      const ped2D = new THREE.Vector2(ped.position.x, ped.position.z);
+      minDist = Math.min(minDist, carPos.distanceTo(ped2D));
+    }
+  }
+
+  const resultHUD = document.getElementById('resultHUD');
+  if (minDist > SAFE_DIST) {
+    resultHUD.style.background = 'rgba(0,128,0,.8)';
+    resultHUD.innerText = `✅ 煞車完成 • 安全距離 ${minDist.toFixed(2)} m`;
+  } else {
+    resultHUD.style.background = 'rgba(128,0,0,.8)';
+    resultHUD.innerText = `❌ 危險！距離只有 ${minDist.toFixed(2)} m`;
+  }
+  resultHUD.style.display = 'block';
+}
 
   renderer.render(scene, camera);
 }
