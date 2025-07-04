@@ -91,8 +91,8 @@
   </div>
 
   <!-- 🔊 音效與紅框 -->
-  <audio id="beepSfx" src="./audio/beep.mp3" preload="auto"></audio>
-  <audio id="voiceSfx" src="./audio/voice_pedestrian.mp3" preload="auto"></audio>
+  <audio id="beepSfx" src="./beep-beep-beep-beep-80262.mp3" preload="auto"></audio>
+  <audio id="voiceSfx" src="./請注意前方行人.mp3" preload="auto"></audio>
 
   <div id="redFrame" style="position:fixed;inset:0;border:8px solid rgba(255,0,0,0);
        pointer-events:none;z-index:999;"></div>
@@ -154,50 +154,60 @@ scene.add(light);
     document.getElementById('playBtn').onclick = () => isPlaying = true;
     document.getElementById('pauseBtn').onclick = () => isPlaying = false;
     document.getElementById('resetBtn').onclick = () => {
-  // 重設時間與距離
+  // 🔁 重設數據與狀態
   time = 0;
   carDistance = 0;
-
-  // 重設剎車狀態
+  carSpeed = parseFloat(document.getElementById("speedInput").value) || 0;
   braking = false;
   brakeTimer = 0;
+  etaDefault = null;
+  etaFrozen = false;
+  initialSpeed = 0;
+  window.pathShown = false;
+  window.formulaShown = false;
+  window.warnPlayed = false;
+  window.resultShown = false;
+  window.earlyWarnPlayed = false;
 
-  // 重設車速（讀取輸入框最新值）
-  carSpeed = parseFloat(document.getElementById("speedInput").value) || 0;
-
-  // 重設行人位置（依最初宣告的初始位置）
-  pedestriansFromObject[0].position.set(0, 0.1, 15);
-  pedestriansWandering[0].position.set(0, 0.1, 20);
-  pedestriansWandering[0].changeTimer = 0;
-
-  // 清除行人軌跡的標記球
+  // 🧹 清除標記球
   [...scene.children].forEach(obj => {
     if (obj.isMesh && obj.geometry.type === 'SphereGeometry') {
       scene.remove(obj);
     }
   });
-// 你原本 reset 已經有清球、清文字，額外再加：
-['formulaHUD','resultHUD'].forEach(id=>{
-  const e=document.getElementById(id);
-  e.style.display='none'; e.innerHTML='';
-});
-document.getElementById('redFrame').style.borderColor='rgba(255,0,0,0)';
-window.pathShown = window.formulaShown = window.warnPlayed = window.resultShown = false;
 
-  // 重設顯示文字
+  // 🧍‍♂️ 重設行人位置
+  pedestriansFromObject[0].position.set(0, 0.1, 15);
+  pedestriansWandering[0].position.set(0, 0.1, 20);
+  pedestriansWandering[0].changeTimer = 0;
+
+  // 🚗 重設車輛位置
+  if (carModel) {
+    carModel.position.set(1.25, 0.1, 2.5 - 50); // Z = -30 時的起始位置
+  }
+
+  // 📉 重設 HUD 顯示
   document.getElementById('timeDisplay').innerText = `模擬秒數: 0.00s`;
+  document.getElementById('speedHUD').innerText = `速度: ${(carSpeed * 3.6).toFixed(1)} km/h`;
+  document.getElementById("etaDisplay").innerText = "預估進入警示區域時間: -- s";
+  document.getElementById("brakeDisplay").innerHTML = `總煞停距離: -- m<br>總煞停時間: -- s`;
 
-document.getElementById('speedHUD').innerText =
-  `速度: ${(carSpeed * 3.6).toFixed(1)} km/h`;
-
-  document.getElementById("etaDisplay").innerText = "ETA: -- s";
-document.getElementById("brakeDisplay").innerHTML = `總煞停距離: -- m<br>總煞停時間: -- s`;
-etaDefault = null;
-etaFrozen = false;
-
-  // 隱藏警告
+  // 🔕 清除警告與紅框
   document.getElementById("warning").style.display = "none";
+  document.getElementById("warning").innerText = "";
+  document.getElementById('redFrame').style.borderColor = 'rgba(255,0,0,0)';
+
+  // 📊 清除結果顯示
+  ['formulaHUD', 'resultHUD'].forEach(id => {
+    const e = document.getElementById(id);
+    e.style.display = 'none';
+    e.innerHTML = '';
+  });
+stopFlashingRedFrame();      // ← 新增
+  // ✅ 模擬狀態暫停
+  isPlaying = false;
 };
+
 
 
     document.getElementById('setSpeedBtn').onclick = () => {
@@ -303,61 +313,93 @@ function computeETAtoEllipse(pedPos, pedDir, pedSpeed, ellipseCenter, ellipseA, 
 let etaDefault = null;     // 預設行人 ETA
 let etaFrozen = false;     // 是否已經進入過橢圓 → 鎖定 ETA
 const SAFE_DIST = 2; // 安全距離閾值 (單位：公尺)
-
+let initialSpeed = 0;  // 紀錄剎車當下的原始速度
+const EPS = 0.05;      // 接近靜止的速度閾值 (m/s)
 
 let braking = false;       // 是否正在剎車
 let brakeTimer = 0;        // 剎車計時器
-function flashRedFrame() {
+/* ====== 1. 取代 flashRedFrame：持續閃爍 ====== */
+let redFrameFlashId = null;   // 閃爍計時器 id
+
+function startFlashingRedFrame() {
+  if (redFrameFlashId !== null) return;        // 已在閃
   const frame = document.getElementById('redFrame');
-  let count = 0;
-  const id = setInterval(()=>{
-    frame.style.borderColor = `rgba(255,0,0,${(count%2)?0:1})`;
-    count++;
-    if (count > 6) { clearInterval(id); frame.style.borderColor='rgba(255,0,0,0)'; }
-  }, 150); // 0.15 s 一閃，總共 3 次
+  let visible = false;
+  redFrameFlashId = setInterval(() => {
+    frame.style.borderColor = visible ? 'rgba(255,0,0,0)'
+                                      : 'rgba(255,0,0,1)';
+    visible = !visible;
+  }, 150);   // 0.15 s 交替
 }
+
+function stopFlashingRedFrame() {
+  const frame = document.getElementById('redFrame');
+  if (redFrameFlashId !== null) {
+    clearInterval(redFrameFlashId);
+    redFrameFlashId = null;
+  }
+  frame.style.borderColor = 'rgba(255,0,0,0)'; // 恢復透明
+}
+
 
 const pedInit  = new THREE.Vector3(0, 0.1, 20);
 const pedTarget= new THREE.Vector3( 4, 0.1,   0);
 const pedDir   = new THREE.Vector3().subVectors(pedTarget, pedInit).normalize();
 const pedSpeed = 2.5;         
-
+  let isPedestrianInEllipse = false;
 function animate() {
   requestAnimationFrame(animate);
-
+isPedestrianInEllipse = false;
 
   if (!isPlaying) return renderer.render(scene, camera);
 console.log(isPlaying);
   time += 0.01;
   document.getElementById('timeDisplay').innerText = `模擬秒數: ${time.toFixed(2)}s`;
 const carX = 2;
-   let carZ = time < 0.01 ? -30 : -30 + carDistance;
+   let carZ = time < 0.01 ? -50 : -50 + carDistance;
   const warningDiv = document.getElementById("warning");
   warningDiv.style.display = "none";
 
   
   // 如果剎車中，速度逐漸減少
   if (braking) {
-    brakeTimer += 0.01;
-    // 剎車時間總長度
-    const t_total = t_reaction + carSpeed / a_brake;
-    // 依剎車時間調整速度（線性降速）
-    carSpeed = Math.max(0, carSpeed * (1 - brakeTimer / t_total));
-    if (carSpeed === 0.0) {
+  brakeTimer += 0.01;
+  
+  if (brakeTimer >= t_reaction) {
+    const t_brake = brakeTimer - t_reaction;
+    carSpeed = Math.max(0, initialSpeed - a_brake * t_brake);  // ✅ 線性減速
+  }
+
+  if (carSpeed <= EPS) {   // 煞停完成
+  carSpeed = 0;
   isPlaying = false;
   warningDiv.innerText = "煞車完成";
   warningDiv.style.background = "red";
   warningDiv.style.display = "block";
 
+  // 停止 beep 音效
+  const beepAudio = document.getElementById('beepSfx');
+  beepAudio.pause();
+  beepAudio.currentTime = 0;
+
+  const voiceAudio = document.getElementById('voiceSfx');
+  voiceAudio.pause();
+  voiceAudio.currentTime = 0;
+  // 停止紅框閃爍
+  stopFlashingRedFrame();
+
   if (!window.resultShown) {
     window.resultShown = true;
-    evaluateStop();  // ✅ 加入這行：進行安全距離判斷
+    evaluateStop();
   }
 
   return;
 }
 
-  }
+}
+
+
+ 
 
   carDistance += carSpeed * 0.01;
  
@@ -376,7 +418,7 @@ document.getElementById('speedHUD').innerText =
   collisionArea.material.color.set(getColorBySpeed(carSpeed));
 
   // 判斷是否有行人進入橢圓區，觸發剎車
-  let isPedestrianInEllipse = false;
+
 
   // 你原本的判斷程式裡，請把「橢圓區判斷」改成下面的同時設定變數
   function checkPedestrian(x, z) {
@@ -408,85 +450,33 @@ if (!etaFrozen) {
   document.getElementById("etaDisplay").innerText =
     `預估進入警示區域時間: ${etaDefault !== null
         ? etaDefault.toFixed(2) + ' s' : '--'}`;
-if (time > 0.5){
-  if (isInsideBox(pedPos.x, pedPos.z, carX, carZ, 1, 1)) {
-    warningDiv.innerText = "碰撞（預設行人）！";
-    warningDiv.style.background = "red";
-    warningDiv.style.display = "block";
-  } else if (checkPedestrian(pedPos.x, pedPos.z)) {
-    warningDiv.innerText = "警示（預設行人）！";
-    warningDiv.style.background = "orange";
-    warningDiv.style.display = "block";
-  }
-}}
+// 1️⃣ 先直接計算
+const inEllipse = isInsideEllipse(pedPos.x, pedPos.z, carX, carZ, 1, scaleZ);
 
-  if (selectedRoute === 'object') {
-    let minETA = null;
-    for (let ped of pedestriansFromObject) {
-      ped.position.addScaledVector(ped.direction, ped.speed);
-      createMarker(ped.position.x, ped.position.y, ped.position.z, 0x00ff00);
+isPedestrianInEllipse = inEllipse;   // 給剎車邏輯用
 
-      const eta = computeETAtoEllipse(
-        ped.position,
-        ped.direction,
-        ped.speed,
-        new THREE.Vector3(carX, 0, carZ),
-        1,
-        scaleZ  
-      );
-      if (eta !== null && (minETA === null || eta < minETA)) minETA = eta;
+// 2️⃣ 然後判斷顯示文字
+if (isInsideBox(pedPos.x, pedPos.z, carX, carZ, 1, 1)) {
+  warningDiv.innerText = "發生車禍";
+  warningDiv.style.background = "red";
+  warningDiv.style.display = "block";
+  isPlaying = false;
+  return;
+} else if (inEllipse) {
+  warningDiv.innerText = "進入警示區";
+  warningDiv.style.background = "orange";
+  warningDiv.style.display = "block";
+    document.getElementById('beepSfx').play();
+    document.getElementById('voiceSfx').play();
+}
 
-      if (isInsideBox(ped.position.x, ped.position.z, carX, carZ, 1, 1)) {
-        warningDiv.innerText = "碰撞（固定路線）！";
-        warningDiv.style.background = "red";
-        warningDiv.style.display = "block";
-      } else if (checkPedestrian(ped.position.x, ped.position.z)) {
-        warningDiv.innerText = "警示（固定路線）！";
-        warningDiv.style.background = "orange";
-        warningDiv.style.display = "block";
-      }
-    }
-    document.getElementById("etaDisplay").innerText = `預估進入警示區域時間: ${minETA !== null ? minETA.toFixed(2) + ' s' : '--'}`;
-  }
+}
 
-  if (selectedRoute === 'wander') {
-    let minETA = null;
-    for (let ped of pedestriansWandering) {
-      ped.changeTimer += 0.01;
-      if (ped.changeTimer > 1.5) {
-        ped.direction = new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
-        ped.changeTimer = 0;
-      }
-      ped.position.addScaledVector(ped.direction, ped.speed);
-      createMarker(ped.position.x, ped.position.y, ped.position.z, 0x00ffff);
 
-      const eta = computeETAtoEllipse(
-        ped.position,
-        ped.direction,
-        ped.speed,
-        new THREE.Vector3(carX, 0, carZ),
-        1,
-        scaleZ
-      );
-      if (eta !== null && (minETA === null || eta < minETA)) minETA = eta;
 
-      if (isInsideBox(ped.position.x, ped.position.z, carX, carZ, 1, 1)) {
-        warningDiv.innerText = "碰撞（自由行人）！";
-        warningDiv.style.background = "red";
-        warningDiv.style.display = "block";
-      } else if (checkPedestrian(ped.position.x, ped.position.z)) {
-        warningDiv.innerText = "警示（自由行人）！";
-        warningDiv.style.background = "orange";
-        warningDiv.style.display = "block";
-      }
-    }
-    document.getElementById("etaDisplay").innerText = `預估進入警示區域時間: ${minETA !== null ? minETA.toFixed(2) + ' s' : '--'}`;
-  }
 
   // 觸發剎車條件
 if (isPedestrianInEllipse && !braking) {
-  braking = true;
-  brakeTimer = 0;
 
   const reactionDistance = carSpeed * t_reaction;
   const brakeDistance = (carSpeed * carSpeed) / (2 * a_brake);
@@ -522,22 +512,20 @@ if (etaDefault !== null) {
     `Δ = ${(etaDefault - window.tStopConst).toFixed(2)} s`;
 
   /* 來不及剎停就立即觸發警示 */
-  if (
+if (
+    time > 0.3 && 
   etaDefault !== null &&
-  etaDefault > 0.05 &&           // ETA 必須大於這個閾值，避免初始就在警戒區誤觸發
+  etaDefault > 0.05 &&
   etaDefault < window.tStopConst &&
-  !window.earlyWarnPlayed &&
-  time > 0.5
-) {
-  const warn = document.getElementById('warning');
-  warn.innerText = '⚠️ 無法及時煞停 ‑ 立即警示！';
-  warn.style.background = 'red';
-  warn.style.display = 'block';
-  document.getElementById('beepSfx').play();
-  flashRedFrame();
+  !window.earlyWarnPlayed 
+) { 
+
+  startFlashingRedFrame();
   window.earlyWarnPlayed = true;
   braking = true;
   brakeTimer = 0;
+initialSpeed = carSpeed; 
+
 }
 
 }
@@ -583,9 +571,17 @@ function evaluateStop() {
   }
   resultHUD.style.display = 'block';
 }
+/* ====== 2. 在 animate() 迴圈尾端統一控制 ====== */
+// 這段放在 animate() 最後一行、呼叫 renderer 前面
+
+if (warningDiv.style.display === "block") {
+  startFlashingRedFrame();     // 目前有警示 → 保持閃爍
+} else {
+  stopFlashingRedFrame();      // 沒有警示 → 關掉閃爍
+}
 
   renderer.render(scene, camera);
-}
+ }
 
     animate();
   </script>
