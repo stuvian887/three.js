@@ -67,9 +67,9 @@
 
     <!-- 🧍‍♂️ 行人路線切換 -->
     <div style="margin-bottom:10px;">
-      <label><input type="radio" name="pedestrianRoute" value="default" checked> 預設路線</label><br>
-      <label><input type="radio" name="pedestrianRoute" value="object"> 對向行人</label><br>
-      <label><input type="radio" name="pedestrianRoute" value="wander"> 自由行人</label>
+      <label><input type="radio" name="pedestrianRoute" value="default" checked> 1路線</label><br>
+      <label><input type="radio" name="pedestrianRoute" value="object"> 2路線</label><br>
+      <label><input type="radio" name="pedestrianRoute" value="wander"> 3路線</label>
     </div>
 
     <!-- 🧭 左下角速度 HUD (km/h) -->
@@ -96,21 +96,70 @@
 
   <div id="redFrame" style="position:fixed;inset:0;border:8px solid rgba(255,0,0,0);
        pointer-events:none;z-index:999;"></div>
-  <script type="module">
+  <script type="module">  
     import * as THREE from 'https://esm.sh/three@0.150.1';
 import { GLTFLoader } from 'https://esm.sh/three@0.150.1/examples/jsm/loaders/GLTFLoader.js';
+/* 1. 載入原始座標 */
+const raw = await (await fetch('./path_587.json')).json();
+
+/* 2. 計算平移量：把第一點拉到想要的起點 (0,0,20) */
+const first = raw[0];                            // {x:214.7, y:0.1, z:797.05}
+const targetStart = new THREE.Vector3(0, 0.1, 20);
+const delta = new THREE.Vector3(
+  targetStart.x - first.x,
+  targetStart.y - first.y,
+  targetStart.z - first.z
+);
+// 先放到檔頭區域
+let currPedPos = new THREE.Vector3();   // ← 新增，只存「這一幀」的行人位置
+
+/* 3‑a. 轉成 Vector3 並平移到 (0,0.1,20) */
+/* -------- 路徑 1（預設） -------- */
+const path = raw.map(p =>
+  new THREE.Vector3(p.x + delta.x, p.y + delta.y, p.z + delta.z)
+);
+const targetStart2 = new THREE.Vector3(1, 0.1, 0);  // 你想讓第二條路線起點移到的座標
+
+const first2 = raw.find(p => p.z >= 800);  // 找 path2 的第一個點
+const delta2 = new THREE.Vector3(
+  targetStart2.x - first2.x,
+  targetStart2.y - first2.y,
+  targetStart2.z - first2.z
+);
+
+/* -------- 路徑 2（221~228 之間） -------- */
+const path2 = raw
+  .filter(p => p.z >= 800)
+  .map(p => new THREE.Vector3(p.x + delta2.x, p.y + delta2.y, p.z + delta2.z));
+let pedIndex  = 0, pedT  = 0;          // 給 path  用
+let pedIndex2 = 0, pedT2 = 0;
+let pedestrianStopped2 = false;
+let etaObject = null, etaFrozen2 = false;
 
 
+const pivot = path2[0].clone();    // 以起點為圓心
 
+function rotatePath(pathRef, angleRad, pivot) {
+  return pathRef.map(p => {
+    const v = p.clone().sub(pivot);                  // 位移到原點
+    v.applyAxisAngle(new THREE.Vector3(0,1,0), angleRad); // Y 軸旋轉
+    return v.add(pivot);                             // 移回原本基準
+  });
+}
+const angle = Math.PI / 4;           // 45°
+
+
+const rotated = rotatePath(path2, angle, pivot);
+for (let i = 0; i < path2.length; i++) path2[i].copy(rotated[i]);
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0xa0a0a0);
 
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-//   camera.position.set(15, 15, 15);
-//  camera.lookAt(-10, 0, 10);
-    camera.position.set(0, 50, 0);  // 垂直上方
-camera.lookAt(0, 0, 0);         // 看向地面中心
-camera.up.set(0, 0, -1);        // 將 Z 軸當作畫面上方
+   camera.position.set(20, 20, 20);
+  camera.lookAt(-10, 0, 10);
+//     camera.position.set(0, 50, 0);  // 垂直上方
+// camera.lookAt(0, 0, 0);         // 看向地面中心
+// camera.up.set(0, 0, -1);        // 將 Z 軸當作畫面上方
 
 
     const renderer = new THREE.WebGLRenderer();
@@ -120,6 +169,9 @@ camera.up.set(0, 0, -1);        // 將 Z 軸當作畫面上方
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshBasicMaterial({ color: 0xcccccc }));
     ground.rotation.x = -Math.PI / 2;
     scene.add(ground);
+// 建議放在 createMarker、drawPredictedPath 之上
+const forecastGroup = new THREE.Group();
+scene.add(forecastGroup);
 
     const dangerArea = new THREE.Mesh(new THREE.BoxGeometry(1.75, 0.2, 4.63), new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.3 }));
     scene.add(dangerArea);
@@ -147,10 +199,7 @@ loader.load('./model/toyota_corolla_altis_stance.glb', gltf => {
   console.error('載入車輛模型失敗:', error);
 });
 /* === 路徑資料 === */
-let path = [];                                 // 行人整條路徑
-await fetch('./path_587.json')
-  .then(r => r.json())
-  .then(d => (path = d.map(p => new THREE.Vector3(p.x, p.y, p.z))));
+
 
 const light = new THREE.DirectionalLight(0xffffff, 1);
 light.position.set(10, 10, 10);
@@ -166,6 +215,7 @@ scene.add(light);
   carDistance = 0;
   carSpeed = parseFloat(document.getElementById("speedInput").value) || 0;
   braking = false;
+
   brakeTimer = 0;
   etaDefault = null;
   etaFrozen = false;
@@ -268,23 +318,47 @@ etaFrozen = false;
     function isInsideBox(px, pz, cx, cz, hx, hz) {
       return Math.abs(px - cx) <= hx && Math.abs(pz - cz) <= hz;
     }
-function drawPredictedPath(startPos, direction, speed, duration = 4, interval = 0.2) {
-  for (let t = 0; t <= duration; t += interval) {
-    const futureX = startPos.x + direction.x * speed * t;
-    const futureY = startPos.y + direction.y * speed * t;
-    const futureZ = startPos.z + direction.z * speed * t;
+// function drawPredictedPath(startPos, direction, speed,
+//                            duration = 4, interval = 0.2) {
+//   // ① 清掉上一幀留下的球
+//   forecastGroup.clear();
 
-    // 顏色從綠 -> 紅
-    const color = new THREE.Color().setHSL((1 - t / duration) * 0.33, 1, 0.5); // 0.33 是綠色, 0 是紅色
+//   // ② 逐格產生新球
+//   for (let t = 0; t <= duration + 4; t += interval) {
+//     const pos = startPos.clone().addScaledVector(direction, speed * t);
 
+//     // 綠→紅漸變
+//     const color = new THREE.Color().setHSL((1 - t / duration) * 0.33, 1, 0.5);
+
+//     const marker = new THREE.Mesh(
+//       new THREE.SphereGeometry(0.1, 8, 8),
+//       new THREE.MeshBasicMaterial({ color })
+//     );
+//     marker.position.copy(pos);
+//     forecastGroup.add(marker);      // ← 塞進 group 裡
+//   }
+// }
+
+function drawNextWaypoints(idx, count = 4) {
+  forecastGroup.clear();            // ① 先把上一次的球清掉
+
+  for (let k = 1; k <= count; k++) {
+    const i = idx + k;
+    if (i >= path.length) break;    // 超過路徑長度就停
+
+    const pos = path[i];            // ② 直接取第 i 個節點座標
+
+    // ③ 顏色由綠 → 紅，愈遠愈紅
+    const hue = (count - k) / count * 0.33;   // 0.33≈綠，0≈紅
     const marker = new THREE.Mesh(
       new THREE.SphereGeometry(0.1, 8, 8),
-      new THREE.MeshBasicMaterial({ color })
+      new THREE.MeshBasicMaterial({ color: new THREE.Color().setHSL(hue, 1, 0.5) })
     );
-    marker.position.set(futureX, futureY, futureZ);
-    scene.add(marker);
+    marker.position.copy(pos);
+    forecastGroup.add(marker);
   }
 }
+
 
     function getColorBySpeed(speed) {
   if (speed < 10) return '#00ffff'; // 青色
@@ -323,12 +397,12 @@ const SAFE_DIST = 2; // 安全距離閾值 (單位：公尺)
 let initialSpeed = 0;  // 紀錄剎車當下的原始速度
 const EPS = 0.05;      // 接近靜止的速度閾值 (m/s)
 /* === 播放參數 === */
-let pedIndex = 0;      // 正在哪兩點之間
-let pedT     = 0;      // 0‒1 線性內插
+
 const segDt  = 0.1;    // 每段花多少秒走過（可調）
 const dt     = 0.01;   // animate() 每幀時間增量
 
 let braking = false;       // 是否正在剎車
+let pedestrianStopped = false; // <-- 行人是否已停止
 let brakeTimer = 0;        // 剎車計時器
 /* ====== 1. 取代 flashRedFrame：持續閃爍 ====== */
 let redFrameFlashId = null;   // 閃爍計時器 id
@@ -367,8 +441,8 @@ isPedestrianInEllipse = false;
 console.log(isPlaying);
   time += 0.01;
   document.getElementById('timeDisplay').innerText = `模擬秒數: ${time.toFixed(2)}s`;
-const carX = 2;
-   let carZ = time < 0.01 ? -50 : -50 + carDistance;
+const carX = 5;
+   let carZ = time < 0.01 ? -90 : -90 + carDistance;
   const warningDiv = document.getElementById("warning");
   warningDiv.style.display = "none";
 
@@ -376,7 +450,7 @@ const carX = 2;
   // 如果剎車中，速度逐漸減少
   if (braking) {
   brakeTimer += 0.01;
-  
+
   if (brakeTimer >= t_reaction) {
     const t_brake = brakeTimer - t_reaction;
     carSpeed = Math.max(0, initialSpeed - a_brake * t_brake);  // ✅ 線性減速
@@ -402,7 +476,7 @@ const carX = 2;
 
   if (!window.resultShown) {
     window.resultShown = true;
-    evaluateStop();
+
   }
 
   return;
@@ -416,7 +490,7 @@ const carX = 2;
   carDistance += carSpeed * 0.01;
  
   if (carModel) {
-  carModel.position.set(1.25, 0.1, 2.5+carZ);  // 根據車速更新 Z 座標
+  carModel.position.set(4.25, 0.1, 2.5+carZ);  // 根據車速更新 Z 座標
 }
 document.getElementById('speedHUD').innerText =
   `速度: ${(carSpeed * 3.6).toFixed(1)} km/h`;
@@ -441,16 +515,22 @@ document.getElementById('speedHUD').innerText =
     return false;
   }
 
+
 if (selectedRoute === 'default' && path.length >= 2) {
   // 1. 目前段 p0→p1
-  const p0 = path[pedIndex];
-  const p1 = path[Math.min(pedIndex + 1, path.length - 1)];
+  var p0 = path[pedIndex];
+  var p1 = path[Math.min(pedIndex + 1, path.length - 1)];
 
   // 2. 依時間內插
-  pedT += dt / segDt;
-  if (pedT >= 1) { pedT = 0; if (pedIndex < path.length - 2) pedIndex++; }
-  const pedPos = p0.clone().lerp(p1, pedT);
-
+if (!pedestrianStopped) {
+    pedT += dt / segDt;
+    if (pedT >= 1) {
+      pedT = 0;
+      if (pedIndex < path.length - 2) pedIndex++;
+    }
+  }
+const pedPos = p0.clone().lerp(p1, pedT);   // 你原本用來畫行人的座標
+currPedPos.copy(pedPos);    
   // 3. 即時方向 / 速度（給 ETA & 剎車公式）
   const pedDir   = p1.clone().sub(p0).normalize();
   const pedSpeed = p0.distanceTo(p1) / segDt;   // m/s
@@ -472,6 +552,9 @@ if (!etaFrozen) {
      etaFrozen = true;          // 踏進橢圓 → 鎖定
    }
  }
+  //  if (isInsideEllipse(pedPos.x, pedPos.z, carX, carZ, 1, scaleZ)) {
+  //   pedestrianStopped = true;
+  // }
   document.getElementById("etaDisplay").innerText =
     `預估進入警示區域時間: ${etaDefault !== null
         ? etaDefault.toFixed(2) + ' s' : '--'}`;
@@ -488,15 +571,81 @@ if (isInsideBox(pedPos.x, pedPos.z, carX, carZ, 1, 1)) {
   isPlaying = false;
   return;
 } else if (inEllipse) {
+
   warningDiv.innerText = "進入警示區";
   warningDiv.style.background = "orange";
   warningDiv.style.display = "block";
     document.getElementById('beepSfx').play();
     document.getElementById('voiceSfx').play();
 }
-
+ 
 }
 
+/* === B. object 路線：x 221–228 之間 === */
+if (selectedRoute === 'object' && path2.length >= 2) {
+
+
+  /* ① 路徑索引／內插用的變數全部換成 pedIndex2 / pedT2 */
+  var q0 = path2[pedIndex2];
+  var q1 = path2[Math.min(pedIndex2 + 1, path2.length - 1)];
+
+  if (!pedestrianStopped2) {              // ② 停止旗標也分開
+    pedT2 += dt / segDt;
+    if (pedT2 >= 1) {
+      pedT2 = 0;
+      if (pedIndex2 < path2.length - 2) pedIndex2++;
+    }
+  }
+
+  const pedPos = q0.clone().lerp(q1, pedT2);
+  currPedPos.copy(pedPos);
+
+  const pedDir   = q1.clone().sub(q0).normalize();
+  const pedSpeed = q0.distanceTo(q1) / segDt;
+
+  /* ③ 換色球／標記同用 */
+  createMarker(pedPos.x, pedPos.y, pedPos.z, 0x00ffff); // ← 顏色給 cyan，方便區分
+
+  /* ④ ETA 與鎖定旗標也分出 object 版本 */
+  if (!etaFrozen2) {
+    const etaCalc = computeETAtoEllipse(
+      pedPos, pedDir, pedSpeed,
+      new THREE.Vector3(carX, 0, carZ), 1, scaleZ
+    );
+
+    if (etaCalc > 0) {
+      etaObject = etaCalc;
+    } else {
+      etaObject = 0;
+      etaFrozen2 = true;
+    }
+  }
+
+  // if (isInsideEllipse(pedPos.x, pedPos.z, carX, carZ, 1, scaleZ)) {
+  //   pedestrianStopped2 = true;
+  // }
+
+  document.getElementById("etaDisplay").innerText =
+    `預估進入警示區域時間: ${etaObject !== null
+        ? etaObject.toFixed(2) + ' s' : '--'}`;
+
+  const inEllipse = isInsideEllipse(pedPos.x, pedPos.z, carX, carZ, 1, scaleZ);
+  isPedestrianInEllipse = inEllipse;
+
+  if (isInsideBox(pedPos.x, pedPos.z, carX, carZ, 1, 1)) {
+    warningDiv.innerText = "發生車禍 (object)";
+    warningDiv.style.background = "red";
+    warningDiv.style.display = "block";
+    isPlaying = false;
+    return;
+  } else if (inEllipse) {
+    warningDiv.innerText = "進入警示區 (object)";
+    warningDiv.style.background = "orange";
+    warningDiv.style.display = "block";
+    document.getElementById('beepSfx').play();
+    document.getElementById('voiceSfx').play();
+  }
+}
 
 
 
@@ -511,15 +660,15 @@ if (isPedestrianInEllipse && !braking) {
 
   document.getElementById("brakeDisplay").innerHTML =
     `總煞停距離: ${totalDistance.toFixed(2)} m<br>總煞停時間: ${totalTime.toFixed(2)} s`;
+    braking = true;  // 這裡一定要加，不然剎車不會開始
+  brakeTimer = 0;  // 建議重置剎車計時器
+  initialSpeed = carSpeed;  // 紀錄當下速度
 }
 
 /* ---------- 1.0 s：顯示預測軌跡 ---------- */
 /* === 1. 顯示預測軌跡：第一次拿到 etaDefault 就畫 === */
-if (!window.pathShown && etaDefault !== null) {
-  window.pathShown = true;
-  const pedPosNow = pedInit.clone().addScaledVector(pedDir, pedSpeed * time);
-  drawPredictedPath(pedPosNow, pedDir, pedSpeed);
-}
+
+
 
 /* === 2. 公式 HUD：第一次算出 etaDefault 時就打開 === */
 if (etaDefault !== null) {
@@ -566,36 +715,34 @@ if (!window.resultShown && (braking && carSpeed === 0 )) {
   isPlaying = false;          // 凍結畫面
   return;
 }
-function evaluateStop() {
-  let minDist = Infinity;
-  const carPos = new THREE.Vector2(carX, carZ);
 
-  // 比較與行人的最短距離
-  if (selectedRoute === 'default') {
-    const pedPos = pedInit.clone().addScaledVector(pedDir, pedSpeed * time);
-    minDist = carPos.distanceTo(new THREE.Vector2(pedPos.x, pedPos.z));
-  } else if (selectedRoute === 'object') {
-    for (let ped of pedestriansFromObject) {
-      const ped2D = new THREE.Vector2(ped.position.x, ped.position.z);
-      minDist = Math.min(minDist, carPos.distanceTo(ped2D));
-    }
-  } else if (selectedRoute === 'wander') {
-    for (let ped of pedestriansWandering) {
-      const ped2D = new THREE.Vector2(ped.position.x, ped.position.z);
-      minDist = Math.min(minDist, carPos.distanceTo(ped2D));
-    }
-  }
+let pedPosForHUD;
+let idxForWaypoints;
+let pathForWaypoints;
 
-  const resultHUD = document.getElementById('resultHUD');
-  if (minDist > SAFE_DIST) {
-    resultHUD.style.background = 'rgba(0,128,0,.8)';
-    resultHUD.innerText = `✅ 煞車完成 • 安全距離 ${minDist.toFixed(2)} m`;
-  } else {
-    resultHUD.style.background = 'rgba(128,0,0,.8)';
-    resultHUD.innerText = `❌ 危險！距離只有 ${minDist.toFixed(2)} m`;
-  }
-  resultHUD.style.display = 'block';
+if (selectedRoute === 'default') {
+  pedPosForHUD      = p0.clone().lerp(p1, pedT);
+  idxForWaypoints   = pedIndex;
+  pathForWaypoints  = path;
+} else if (selectedRoute === 'object') {
+  pedPosForHUD      = q0.clone().lerp(q1, pedT2);
+  idxForWaypoints   = pedIndex2;
+  pathForWaypoints  = path2;
 }
+
+// ── 距離 HUD ───────────────────────
+const carPos = new THREE.Vector3(carX, 0.1, carZ);
+const dist   = pedPosForHUD.distanceTo(carPos);
+resultHUD.style.background = dist > SAFE_DIST ? 'rgba(0,128,0,.8)' : 'rgba(128,0,0,.8)';
+resultHUD.innerText = dist > SAFE_DIST ?
+  `✅ 煞車完成 • 安全距離 ${dist.toFixed(2)} m` :
+  `❌ 危險！距離只有 ${dist.toFixed(2)} m`;
+resultHUD.style.display = 'block';
+
+// ── 4‑點預測球 ──────────────────────
+drawNextWaypoints(idxForWaypoints, pathForWaypoints);
+
+
 /* ====== 2. 在 animate() 迴圈尾端統一控制 ====== */
 // 這段放在 animate() 最後一行、呼叫 renderer 前面
 
@@ -606,7 +753,7 @@ if (warningDiv.style.display === "block") {
 }
 
   renderer.render(scene, camera);
- }
+}
 
     animate();
   </script>
