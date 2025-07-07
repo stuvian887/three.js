@@ -104,7 +104,7 @@ const raw = await (await fetch('./path_587.json')).json();
 
 /* 2. 計算平移量：把第一點拉到想要的起點 (0,0,20) */
 const first = raw[0];                            // {x:214.7, y:0.1, z:797.05}
-const targetStart = new THREE.Vector3(0, 0.1, 20);
+const targetStart = new THREE.Vector3(0, 0.1, 0);
 const delta = new THREE.Vector3(
   targetStart.x - first.x,
   targetStart.y - first.y,
@@ -136,21 +136,65 @@ let pedIndex2 = 0, pedT2 = 0;
 let pedestrianStopped2 = false;
 let etaObject = null, etaFrozen2 = false;
 
+const pivot = path[0].clone();    // 以起點為圓心
+const pivot2 = path2[0].clone();    // 以起點為圓心
 
-const pivot = path2[0].clone();    // 以起點為圓心
-
+function rotatePath2(pathRef, angleRad, pivot) {
+  return pathRef.map(p => {
+    const v = p.clone().sub(pivot);                  // 位移到原點
+    v.applyAxisAngle(new THREE.Vector3(0,-3,0), angleRad); // Y 軸旋轉
+    return v.add(pivot);                             // 移回原本基準
+  });
+}
 function rotatePath(pathRef, angleRad, pivot) {
   return pathRef.map(p => {
     const v = p.clone().sub(pivot);                  // 位移到原點
-    v.applyAxisAngle(new THREE.Vector3(0,1,0), angleRad); // Y 軸旋轉
+    v.applyAxisAngle(new THREE.Vector3(0,-1,0), angleRad); // Y 軸旋轉
     return v.add(pivot);                             // 移回原本基準
   });
 }
 const angle = Math.PI / 4;           // 45°
 
+const rotated = rotatePath2(path, angle, pivot);
+const rotated2 = rotatePath(path2, angle, pivot2);
+for (let i = 0; i < path.length; i++) path[i].copy(rotated[i]);
+for (let i = 0; i < path2.length; i++) path2[i].copy(rotated2[i]);
 
-const rotated = rotatePath(path2, angle, pivot);
-for (let i = 0; i < path2.length; i++) path2[i].copy(rotated[i]);
+const offset2 = new THREE.Vector3(  4,   0,  0 );   // 想往 +X0.8、‑Z2.5 的方向平移
+path2.forEach(p => p.add(offset2));                       // 把位移套到每個節點
+pivot.add(offset2);    
+const offset1 = new THREE.Vector3(  4,   0,  0 );   // 想往 +X0.8、‑Z2.5 的方向平移
+path.forEach(p => p.add(offset1));                       // 把位移套到每個節點
+pivot.add(offset1);  
+/* -------- 路徑 3（X 241~262） -------- */
+const targetStart3 = new THREE.Vector3(-3, 0.1, 10);   // ← 想放第 3 路線的起點
+const first3 = raw.find(p => p.x >= 241 && p.x <= 263); // 找到落在區間的第一點
+
+const delta3 = new THREE.Vector3(
+  targetStart3.x - first3.x,
+  targetStart3.y - first3.y,
+  targetStart3.z - first3.z
+);
+
+const path3 = raw
+  .filter(p => p.x >= 241 && p.x <= 262)               // 把 X 落在區間的點挑出
+  .map(p => new THREE.Vector3(p.x + delta3.x,
+                              p.y + delta3.y,
+                              p.z + delta3.z));
+/* 旋轉 & 位移（跟前面作法完全相同） ----------------- */
+const pivot3  = path3[0].clone();
+const rotated3 = rotatePath(path3, angle, pivot3);      // 40 行前後都可重用
+for (let i = 0; i < path3.length; i++) path3[i].copy(rotated3[i]);
+
+const offset3 = new THREE.Vector3( 1, 0, -5 );           // 要不要再平移，看需求
+path3.forEach(p => p.add(offset3));
+pivot3.add(offset3);
+
+/* 對應的索引 / 旗標 ----------------------------- */
+let pedIndex3  = 0, pedT3  = 0;
+let etaThird   = null, etaFrozen3 = false;
+let pedestrianStopped3 = false;
+
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0xa0a0a0);
 
@@ -339,17 +383,13 @@ etaFrozen = false;
 //   }
 // }
 
-function drawNextWaypoints(idx, count = 4) {
-  forecastGroup.clear();            // ① 先把上一次的球清掉
-
+function drawNextWaypoints(idx, pathRef, count = 4) {
+  forecastGroup.clear();
   for (let k = 1; k <= count; k++) {
     const i = idx + k;
-    if (i >= path.length) break;    // 超過路徑長度就停
-
-    const pos = path[i];            // ② 直接取第 i 個節點座標
-
-    // ③ 顏色由綠 → 紅，愈遠愈紅
-    const hue = (count - k) / count * 0.33;   // 0.33≈綠，0≈紅
+    if (i >= pathRef.length) break;
+    const pos = pathRef[i];
+    const hue = (count - k) / count * 0.33;
     const marker = new THREE.Mesh(
       new THREE.SphereGeometry(0.1, 8, 8),
       new THREE.MeshBasicMaterial({ color: new THREE.Color().setHSL(hue, 1, 0.5) })
@@ -358,6 +398,7 @@ function drawNextWaypoints(idx, count = 4) {
     forecastGroup.add(marker);
   }
 }
+
 
 
     function getColorBySpeed(speed) {
@@ -552,9 +593,9 @@ if (!etaFrozen) {
      etaFrozen = true;          // 踏進橢圓 → 鎖定
    }
  }
-  //  if (isInsideEllipse(pedPos.x, pedPos.z, carX, carZ, 1, scaleZ)) {
-  //   pedestrianStopped = true;
-  // }
+//     if (isInsideEllipse(pedPos.x, pedPos.z, carX, carZ, 1, scaleZ)) {
+//      pedestrianStopped = true;
+//    }
   document.getElementById("etaDisplay").innerText =
     `預估進入警示區域時間: ${etaDefault !== null
         ? etaDefault.toFixed(2) + ' s' : '--'}`;
@@ -621,9 +662,9 @@ if (selectedRoute === 'object' && path2.length >= 2) {
     }
   }
 
-  // if (isInsideEllipse(pedPos.x, pedPos.z, carX, carZ, 1, scaleZ)) {
-  //   pedestrianStopped2 = true;
-  // }
+  //  if (isInsideEllipse(pedPos.x, pedPos.z, carX, carZ, 1, scaleZ)) {
+  //    pedestrianStopped2 = true;
+  //  }
 
   document.getElementById("etaDisplay").innerText =
     `預估進入警示區域時間: ${etaObject !== null
@@ -645,7 +686,62 @@ if (selectedRoute === 'object' && path2.length >= 2) {
     document.getElementById('beepSfx').play();
     document.getElementById('voiceSfx').play();
   }
+}/* === C. wander 路線：x 241–262 之間 === */
+if (selectedRoute === 'wander' && path3.length >= 2) {
+
+  var r0 = path3[pedIndex3];
+  var r1 = path3[Math.min(pedIndex3 + 1, path3.length - 1)];
+
+  if (!pedestrianStopped3) {
+    pedT3 += dt / segDt;
+    if (pedT3 >= 1) {
+      pedT3 = 0;
+      if (pedIndex3 < path3.length - 2) pedIndex3++;
+    }
+  }
+
+  const pedPos = r0.clone().lerp(r1, pedT3);
+  currPedPos.copy(pedPos);
+
+  const pedDir   = r1.clone().sub(r0).normalize();
+  const pedSpeed = r0.distanceTo(r1) / segDt;
+
+  createMarker(pedPos.x, pedPos.y, pedPos.z, 0x00ff00); // lime 綠
+
+  if (!etaFrozen3) {
+    const etaCalc = computeETAtoEllipse(
+      pedPos, pedDir, pedSpeed,
+      new THREE.Vector3(carX, 0, carZ), 1, scaleZ
+    );
+
+    if (etaCalc > 0)  etaThird = etaCalc;
+    else { etaThird = 0; etaFrozen3 = true; }
+  }
+
+  document.getElementById("etaDisplay").innerText =
+    `預估進入警示區域時間: ${etaThird !== null
+       ? etaThird.toFixed(2) + ' s' : '--'}`;
+
+  const inEllipse = isInsideEllipse(pedPos.x, pedPos.z, carX, carZ, 1, scaleZ);
+  isPedestrianInEllipse = inEllipse;
+// if (isInsideEllipse(pedPos.x, pedPos.z, carX, carZ, 1, scaleZ)) {
+//      pedestrianStopped3 = true;
+//    }
+  if (isInsideBox(pedPos.x, pedPos.z, carX, carZ, 1, 1)) {
+    warningDiv.innerText = "發生車禍 (wander)";
+    warningDiv.style.background = "red";
+    warningDiv.style.display = "block";
+    isPlaying = false;
+    return;
+  } else if (inEllipse) {
+    warningDiv.innerText = "進入警示區 (wander)";
+    warningDiv.style.background = "orange";
+    warningDiv.style.display = "block";
+    document.getElementById('beepSfx').play();
+    document.getElementById('voiceSfx').play();
+  }
 }
+
 
 
 
@@ -728,6 +824,10 @@ if (selectedRoute === 'default') {
   pedPosForHUD      = q0.clone().lerp(q1, pedT2);
   idxForWaypoints   = pedIndex2;
   pathForWaypoints  = path2;
+}else if (selectedRoute === 'wander') {
+  pedPosForHUD     = r0.clone().lerp(r1, pedT3);
+  idxForWaypoints  = pedIndex3;
+  pathForWaypoints = path3;
 }
 
 // ── 距離 HUD ───────────────────────
