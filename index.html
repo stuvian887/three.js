@@ -106,11 +106,12 @@ import { GLTFLoader } from 'https://esm.sh/three@0.150.1/examples/jsm/loaders/GL
     scene.background = new THREE.Color(0xa0a0a0);
 
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-  camera.position.set(15, 15, 15);
- camera.lookAt(-10, 0, 10);
-    // camera.position.set(0, 50, 0);
-    //   camera.lookAt(0, 0, 0);
-    //   camera.up.set(0, 0, 1);
+//   camera.position.set(15, 15, 15);
+//  camera.lookAt(-10, 0, 10);
+    camera.position.set(0, 50, 0);  // 垂直上方
+camera.lookAt(0, 0, 0);         // 看向地面中心
+camera.up.set(0, 0, -1);        // 將 Z 軸當作畫面上方
+
 
     const renderer = new THREE.WebGLRenderer();
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -145,6 +146,12 @@ loader.load('./model/toyota_corolla_altis_stance.glb', gltf => {
 }, undefined, error => {
   console.error('載入車輛模型失敗:', error);
 });
+/* === 路徑資料 === */
+let path = [];                                 // 行人整條路徑
+await fetch('./path_587.json')
+  .then(r => r.json())
+  .then(d => (path = d.map(p => new THREE.Vector3(p.x, p.y, p.z))));
+
 const light = new THREE.DirectionalLight(0xffffff, 1);
 light.position.set(10, 10, 10);
 scene.add(light);
@@ -315,6 +322,11 @@ let etaFrozen = false;     // 是否已經進入過橢圓 → 鎖定 ETA
 const SAFE_DIST = 2; // 安全距離閾值 (單位：公尺)
 let initialSpeed = 0;  // 紀錄剎車當下的原始速度
 const EPS = 0.05;      // 接近靜止的速度閾值 (m/s)
+/* === 播放參數 === */
+let pedIndex = 0;      // 正在哪兩點之間
+let pedT     = 0;      // 0‒1 線性內插
+const segDt  = 0.1;    // 每段花多少秒走過（可調）
+const dt     = 0.01;   // animate() 每幀時間增量
 
 let braking = false;       // 是否正在剎車
 let brakeTimer = 0;        // 剎車計時器
@@ -429,8 +441,21 @@ document.getElementById('speedHUD').innerText =
     return false;
   }
 
-  if (selectedRoute === 'default') {
-  const pedPos = pedInit.clone().addScaledVector(pedDir, pedSpeed * time);
+if (selectedRoute === 'default' && path.length >= 2) {
+  // 1. 目前段 p0→p1
+  const p0 = path[pedIndex];
+  const p1 = path[Math.min(pedIndex + 1, path.length - 1)];
+
+  // 2. 依時間內插
+  pedT += dt / segDt;
+  if (pedT >= 1) { pedT = 0; if (pedIndex < path.length - 2) pedIndex++; }
+  const pedPos = p0.clone().lerp(p1, pedT);
+
+  // 3. 即時方向 / 速度（給 ETA & 剎車公式）
+  const pedDir   = p1.clone().sub(p0).normalize();
+  const pedSpeed = p0.distanceTo(p1) / segDt;   // m/s
+
+  // 4. 你之前的流程：標記球、ETA 計算、警示顯示
   createMarker(pedPos.x, pedPos.y, pedPos.z, 0xff0000);
 
 if (!etaFrozen) {

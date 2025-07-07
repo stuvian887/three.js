@@ -2,7 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
-
+import json
 
 # Load the CSV data into a pandas DataFrame
 file_path = "./10520_cart_knnr_model120_detailed_predictions_120frames.csv"  # ← 依實際路徑調整
@@ -21,7 +21,7 @@ df = df.dropna(subset=['predicted_x', 'predicted_y', 'true_x', 'true_y'])
 # Get unique sample_ids
 sample_ids = df['sample_id'].unique()
 print(sample_ids)
-
+"""
 max_samples = 695
 sample_ids = sample_ids[:min(max_samples, len(sample_ids))]
 
@@ -64,12 +64,13 @@ for sample_id in sample_ids:
     plt.show()
 """
 # ===== 修改這區就好 =====
-target_samples = [599, 587]          # 想跑 2 與 5 兩個 sample_id
+target_samples = [587]          # 想跑 2 與 5 兩個 sample_id
 # target_samples = [2]           # 想跑單一 sample_id = 2
 # ==========================
+output_path = "./path_587.json"
 
+export_data = []
 for sample_id in target_samples:
-    # 先確認這個 sample_id 是否真的存在
     if sample_id not in df['sample_id'].unique():
         print(f"Sample {sample_id} 不存在，跳過")
         continue
@@ -82,6 +83,19 @@ for sample_id in target_samples:
             .sort_values("absolute_frame")
         )
 
+        # 將預測座標轉為 JS-friendly 格式，固定 y=0.1 為地面高度
+        points = [
+            {"x": float(x), "y": 0.1, "z": float(y)}
+            for x, y in zip(sample_df['predicted_x'], sample_df['predicted_y'])
+        ]
+
+        export_data.extend(points)
+
+        # 👉 寫出 JSON 檔
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(export_data, f, ensure_ascii=False, indent=2)
+
+        print(f"已儲存 {len(points)} 個點到 {output_path}")
         plt.figure(figsize=(10, 6))
         plt.plot(sample_df['predicted_x'], sample_df['predicted_y'],
                  label='Predicted', marker='o', markersize=3)
@@ -94,4 +108,3 @@ for sample_id in target_samples:
         plt.grid(True)
         plt.axis("equal")
         plt.show()
-"""
