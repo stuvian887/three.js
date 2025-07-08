@@ -160,7 +160,7 @@ const rotated2 = rotatePath(path2, angle, pivot2);
 for (let i = 0; i < path.length; i++) path[i].copy(rotated[i]);
 for (let i = 0; i < path2.length; i++) path2[i].copy(rotated2[i]);
 
-const offset2 = new THREE.Vector3(  4,   0,  0 );   // 想往 +X0.8、‑Z2.5 的方向平移
+const offset2 = new THREE.Vector3(  4,   0,  15 );   // 想往 +X0.8、‑Z2.5 的方向平移
 path2.forEach(p => p.add(offset2));                       // 把位移套到每個節點
 pivot.add(offset2);    
 const offset1 = new THREE.Vector3(  4,   0,  0 );   // 想往 +X0.8、‑Z2.5 的方向平移
@@ -186,7 +186,7 @@ const pivot3  = path3[0].clone();
 const rotated3 = rotatePath(path3, angle, pivot3);      // 40 行前後都可重用
 for (let i = 0; i < path3.length; i++) path3[i].copy(rotated3[i]);
 
-const offset3 = new THREE.Vector3( 1, 0, -5 );           // 要不要再平移，看需求
+const offset3 = new THREE.Vector3( 2, 0, -3 );           // 要不要再平移，看需求
 path3.forEach(p => p.add(offset3));
 pivot3.add(offset3);
 
@@ -349,7 +349,7 @@ etaFrozen = false;
 
 
     function createMarker(x, y, z, color = 0xffff00) {
-      const marker = new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 16), new THREE.MeshBasicMaterial({ color }));
+      const marker = new THREE.Mesh(new THREE.SphereGeometry(0.1, 16, 16), new THREE.MeshBasicMaterial({ color }));
       marker.position.set(x, y, z);
       scene.add(marker);
     }
@@ -439,7 +439,7 @@ let initialSpeed = 0;  // 紀錄剎車當下的原始速度
 const EPS = 0.05;      // 接近靜止的速度閾值 (m/s)
 /* === 播放參數 === */
 
-const segDt  = 0.1;    // 每段花多少秒走過（可調）
+const segDt  = 0.2;    // 每段花多少秒走過（可調）
 const dt     = 0.01;   // animate() 每幀時間增量
 
 let braking = false;       // 是否正在剎車
